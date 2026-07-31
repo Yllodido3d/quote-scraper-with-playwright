@@ -2,6 +2,7 @@
 from playwright.sync_api import sync_playwright
 import pandas as pd
 import os
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
 # função base
 
@@ -14,47 +15,53 @@ def quote_scraper(base_url: str = "https://quotes.toscrape.com/"):
         page = browser.new_page()
         # evitar travamento
         page.set_default_timeout(10000)
+        try:
+            # acessar a url foda lá de teste
+            print(f"Acessing: {base_url}")
+            page.goto(base_url)
 
-        # acessar a url foda lá de teste
-        print(f"Acessing: {base_url}")
-        page.goto(base_url)
+            lista = []
 
-        lista = []
+            while True:
+                # esperar quotes carregarem (já q vão ser extraidas)
+                print("Waitings for quotes...")
+                page.wait_for_selector(".quote")
 
-        while True:
-            # esperar quotes carregarem (já q vão ser extraidas)
-            print("Waitings for quotes...")
-            page.wait_for_selector(".quote")
+                # extrair as parada agora (quotes)
+                print("Scraping quotes...")
+                quotes = page.locator(".quote")
 
-            # extrair as parada agora (quotes)
-            print("Scraping quotes...")
-            quotes = page.locator(".quote")
+                quotes_count = quotes.count()
+                for i in range(quotes_count):
+                    # seleciona o quote da posição i #nth serve pra selecionar o elemtno da posição i
+                    quote = quotes.nth(i)
+                    # pegar o texto do elemento text
+                    texto = quote.locator(".text").inner_text()
+                    autor = quote.locator(".author").inner_text()
 
-            quotes_count = quotes.count()
-            for i in range(quotes_count):
-                # seleciona o quote da posição i #nth serve pra selecionar o elemtno da posição i
-                quote = quotes.nth(i)
-                # pegar o texto do elemento text
-                texto = quote.locator(".text").inner_text()
-                autor = quote.locator(".author").inner_text()
+                    lista.append({"text": texto, "author": autor})
 
-                lista.append({"text": texto, "author": autor})
+                # tentar ver se tem mais paginas
+                next_bot = page.locator("a:has-text('Next')")
 
-            # tentar ver se tem mais paginas
-            next_bot = page.locator("a:has-text('Next')")
+                # se o botãp n existir a pagina acabou, n sobrou nada 😢
+                if next_bot.count() == 0:
+                    print("No more pages found.")
+                    break
 
-            # se o botãp n existir a pagina acabou, n sobrou nada 😢
-            if next_bot.count() == 0:
-                print("No more pages found.")
-                break
-
-            # se existir, clica e espera carregar
-            print("Next page...")
-            next_bot.first.click()
-            page.wait_for_selector(".quote")
-
-        # fechar o navegador
-        browser.close()
+                # se existir, clica e espera carregar
+                print("Next page...")
+                next_bot.first.click()
+                page.wait_for_selector(".quote")
+        except PlaywrightTimeoutError as erro:
+            print(erro)
+            lista = []
+        except Exception as erro:
+            print(erro)
+            lista = []
+        finally:
+            browser.close()
+            # fechar o navegador
 
     # fazer o dataframe foda lá
     df = pd.DataFrame(lista)
